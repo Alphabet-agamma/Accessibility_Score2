@@ -39,10 +39,10 @@ gu_centroids = {
 }
 
 # ---------------------------------------
-# 2. 장소 데이터
+# 2. 클러스터 데이터 로드
 # ---------------------------------------
-df = pd.read_excel("merged_clean.xlsx")
-df = df.dropna(subset=["latitude", "longitude"])
+clusters = pd.read_excel("clusters_500m_2.xlsx")
+clusters = clusters.dropna(subset=["centroid_lat", "centroid_lng"])
 
 results = []
 
@@ -51,7 +51,7 @@ results = []
 # ---------------------------------------
 def get_transit(orig_lat, orig_lng, dest_lat, dest_lng):
 
-    # 항상 미래 시간대 (내일 오후 2시)
+    # 내일 오후 2시
     tomorrow = datetime.datetime.now() + datetime.timedelta(days=1)
     dt = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 14, 0, 0)
     timestamp = int(dt.timestamp())
@@ -81,25 +81,16 @@ def get_transit(orig_lat, orig_lng, dest_lat, dest_lng):
     except:
         return None
 
-    # 기본값
     total = leg["duration"]["value"] // 60
     T_walk, T_sub, T_bus = 0, 0, 0
     N_tr = 0
 
     for step in leg["steps"]:
-        try:
-            mode = step["travel_mode"]
-        except:
-            continue
+        mode = step.get("travel_mode", None)
 
-        # 도보
         if mode == "WALKING":
-            try:
-                T_walk += step["duration"]["value"] // 60
-            except:
-                pass
+            T_walk += step["duration"]["value"] // 60
 
-        # 대중교통
         elif mode == "TRANSIT":
             N_tr += 1
             dur = step["duration"]["value"] // 60
@@ -120,35 +111,34 @@ def get_transit(orig_lat, orig_lng, dest_lat, dest_lng):
 
 
 # ---------------------------------------
-# 4. 메인 루프 (완전 안전)
+# 4. 메인 루프 (군집 단위 계산)
 # ---------------------------------------
-total_places = len(df)
+total_clusters = len(clusters)
 total_gus = len(gu_centroids)
 
-print(f"총 예상 API 호출: {total_places * total_gus}")
+print(f"총 예상 API 호출: {total_clusters * total_gus}")
 
-for place_idx, row in tqdm(df.iterrows(), total=total_places, desc="전체 장소 처리"):
-    place_name = row["place_name"]
-    lat_j = row["latitude"]
-    lng_j = row["longitude"]
+for cidx, row in tqdm(clusters.iterrows(), total=total_clusters, desc="전체 군집 처리"):
+    cluster_id = row["cluster_id"]
+    lat_j = row["centroid_lat"]
+    lng_j = row["centroid_lng"]
 
     for gu_idx, (gu, (lat_i, lng_i)) in tqdm(
         enumerate(gu_centroids.items()),
         total=len(gu_centroids),
-        desc=f"{place_idx+1}번째 장소",
+        desc=f"{cidx+1}번째 군집",
         leave=False
     ):
         res = get_transit(lat_i, lng_i, lat_j, lng_j)
 
-        # 실패한 경우 → NaN 처리
         if res is None:
-            results.append([place_name, gu, np.nan, np.nan, np.nan, np.nan, np.nan])
+            results.append([cluster_id, gu, np.nan, np.nan, np.nan, np.nan, np.nan])
             continue
 
         T_total, T_walk, T_sub, T_bus, N_tr = res
 
         results.append([
-            place_name, gu, T_total, T_walk, T_sub, T_bus, N_tr
+            cluster_id, gu, T_total, T_walk, T_sub, T_bus, N_tr
         ])
 
         time.sleep(0.1)
@@ -157,8 +147,8 @@ for place_idx, row in tqdm(df.iterrows(), total=total_places, desc="전체 장�
 # 5. 저장
 # ---------------------------------------
 out = pd.DataFrame(results, columns=[
-    "place_name", "gu", "T_total", "T_walk", "T_subway", "T_bus", "N_transfer"
+    "cluster_id", "gu", "T_total", "T_walk", "T_subway", "T_bus", "N_transfer"
 ])
 
-out.to_excel("google_travel_long.xlsx", index=False)
-print("🎉 완료: google_travel_long.xlsx 생성")
+out.to_excel("cluster_pathfind.xlsx", index=False)
+print("🎉 완료: cluster_pathfind.xlsx 생성")
