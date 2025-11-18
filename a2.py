@@ -41,7 +41,7 @@ gu_centroids = {
 # ---------------------------------------
 # 2. 클러스터 데이터 로드
 # ---------------------------------------
-clusters = pd.read_excel("clusters_500m_2.xlsx")
+clusters = pd.read_excel("clusters_500m.xlsx")
 clusters = clusters.dropna(subset=["centroid_lat", "centroid_lng"])
 
 results = []
